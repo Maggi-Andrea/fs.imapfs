@@ -6,6 +6,8 @@ Intro
 
 This is the first release of the library.
 
+The library has been inspired from the implememnation of the FTSFS and use internally the imapclient library (see Reference).
+
 It's working and tested with some IMAP server.
 
 IMAP server use a sort of file system structure and implemanting the library has been done for now some assumption that fall out of the box of the standard when you think about a file system, specially on file creation and file name.
