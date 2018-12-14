@@ -6,15 +6,15 @@ Intro
 
 This is the first release of the library.
 
-The library has been inspired from the implememnation of the FTSFS and use internally the imapclient library (see Reference).
+The library has been inspired from the implementation of the FTSFS and use internally the imapclient library (see Reference).
 
 It's working and tested with some IMAP server.
 
-IMAP server use a sort of file system structure and implemanting the library has been done for now some assumption that fall out of the box of the standard when you think about a file system, specially on file creation and file name.
+IMAP server use a sort of file system structure and implementing the library has been done for now some assumption that fall out of the box of the standard when you think about a file system, specially on file creation and file name.
 
 IMAP server indeeed, when uploading a new data (an e-mail), assign to this new massage a new UID. This UID is then used as the file name.
 
-This means that when you upload new content usimng the fs API, you specify the file name, but this will be considered, as exaple see:
+This means that when you upload new content usimng the fs API, you specify the file name, but this will be considered, as example see:
 
 ```python
 imap_fs.tree()
@@ -41,7 +41,7 @@ imap_fs.tree()
     `-- 5.eml
 ```
 
-The new file has recived UID == 1 becouse was the first one into that folder.
+The new file has received UID == 1 because was the first one into that folder.
 
 
 
