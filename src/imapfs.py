@@ -289,6 +289,7 @@ class IMAPFS(FS):
         self._welcome = None  # type: Optional[Text]
         self._imap = None
         self.__delimiter = None
+        self.__ns_root = None
         self.imap
 
     def __repr__(self):
@@ -412,6 +413,19 @@ class IMAPFS(FS):
                 self.__delimiter = ''
         return self.__delimiter
     
+    @property 
+    def _ns_root(self):
+        if self.__ns_root is None:
+            if self.imap.has_capability('NAMESPACE'):
+                personal_namespaces = self.imap.namespace().personal
+                for personal_namespace in personal_namespaces:
+                    self.__ns_root = personal_namespace[0]
+                    if self.__ns_root is not None:
+                        break
+            if self.__ns_root is None:
+                self.__ns_root = ''
+        return self.__ns_root     
+    
     def _read_dir(self, path, namespaces=None):
         namespaces = namespaces or ()
         def _get_folder_list(path):
@@ -436,10 +450,8 @@ class IMAPFS(FS):
                 if message == 'select failed: folder does not exist':
                     raise errors.ResourceNotFound(path)
             if _selected and _selected[b'EXISTS']:
-                file_list = imap.search()
-                if file_list:
-                    for file_name, file in imap.fetch(file_list, ['FLAGS', 'ENVELOPE', 'RFC822.SIZE']).items():
-                        _list.append(IMAPFS._file_Info(str(file_name), file))
+                for file_name, file in imap.fetch(imap.search(), ['FLAGS', 'ENVELOPE', 'RFC822.SIZE']).items():
+                    _list.append(IMAPFS._file_Info(str(file_name), file))
             
             for flags, delimiter, name  in _get_folder_list(path):
                 folder_root = None
