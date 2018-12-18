@@ -4,7 +4,7 @@ Pyfilesystem2 implementation for Imap
 Intro
 =====
 
-This is the first release of the library. The implemantation is at its early stage. The module is not jet ready to be installed (setup module is missing and the module must be moved into the fs package namespace. Apart from that, the module is fully working.
+This is the first release of the library. The implemantation is at its early stage. The module is not jet ready to be installed: setup module is missing and no opener implemented. Apart from that, the module is fully working.
 
 The library has been inspired from the implementation of the FTSFS and use internally the imapclient library (see Reference).
 

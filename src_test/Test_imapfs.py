@@ -21,8 +21,8 @@ import time
 # 
 import fs.copy
 import fs.move
-from fs import ResourceType 
-from fs import Seek
+from fs.enums import ResourceType
+from fs.enums import Seek
 from fs import errors
 from fs import walk
 from fs import glob
@@ -34,7 +34,7 @@ import pytz
 import six
 from six import text_type
 
-from imapfs import IMAPFS as IMAPFS
+from fs.imapfs import IMAPFS as IMAPFS
 
 UNICODE_TEXT = """
 
