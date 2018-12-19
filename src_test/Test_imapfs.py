@@ -1141,39 +1141,42 @@ class Test(unittest.TestCase):
         self.assertIsInstance(info.get('imap', 'uidvalidity'), int)
         self.assertEqual(info.get('imap', 'unseen'), 1)
         
-# 
-#     def test_setinfo(self):
-#         self.fs.create("birthday.txt")
-#         now = math.floor(time.time())
-# 
-#         change_info = {"details": {"accessed": now + 60, "modified": now + 60 * 60}}
-#         self.fs.setinfo("birthday.txt", change_info)
-#         new_info = self.fs.getinfo("birthday.txt", namespaces=["details"]).raw
-#         if "accessed" in new_info.get("_write", []):
-#             self.assertEqual(new_info["details"]["accessed"], now + 60)
-#         if "modified" in new_info.get("_write", []):
-#             self.assertEqual(new_info["details"]["modified"], now + 60 * 60)
-# 
-#         with self.assertRaises(errors.ResourceNotFound):
-#             self.fs.setinfo("nothing", {})
+ 
+    def test_setinfo(self):
+        self.fs.setbytes(self.TEST_PATH + "1.eml", b"bar\r\n")
+        
+        old_info = self.fs.getinfo(self.TEST_PATH + "1.eml").raw
+        self.assertTrue('\\Seen' not in old_info['imap']['flags'])
+ 
+        change_info = {'imap' : {'flags' : ['\\Seen']}}
+        self.fs.setinfo(self.TEST_PATH + "1.eml", change_info)
+        new_info = self.fs.getinfo(self.TEST_PATH + "1.eml", namespaces=["details"]).raw
+        self.assertTrue('\\Seen' in new_info['imap']['flags'])
+        
+        with self.assertRaises(errors.ResourceNotFound):
+            self.fs.setinfo("nothing", {})
+            
+        with self.assertRaises(errors.FileExpected):
+            self.fs.setinfo(self.TEST_PATH, change_info)
+            
 # 
 #     def test_settimes(self):
 #         self.fs.create("birthday.txt")
 #         self.fs.settimes("birthday.txt", accessed=datetime(2016, 7, 5))
-#         info = self.fs.getinfo("birthday.txt", namespaces=["details"])
-#         writeable = info.get("details", "_write", [])
+#         old_info = self.fs.getinfo("birthday.txt", namespaces=["details"])
+#         writeable = old_info.get("details", "_write", [])
 #         if "accessed" in writeable:
-#             self.assertEqual(info.accessed, datetime(2016, 7, 5, tzinfo=pytz.UTC))
+#             self.assertEqual(old_info.accessed, datetime(2016, 7, 5, tzinfo=pytz.UTC))
 #         if "modified" in writeable:
-#             self.assertEqual(info.modified, datetime(2016, 7, 5, tzinfo=pytz.UTC))
+#             self.assertEqual(old_info.modified, datetime(2016, 7, 5, tzinfo=pytz.UTC))
 # 
 #     def test_touch(self):
 #         self.fs.touch("new.txt")
 #         self.assert_isfile("new.txt")
 #         self.fs.settimes("new.txt", datetime(2016, 7, 5))
-#         info = self.fs.getinfo("new.txt", namespaces=["details"])
-#         if info.is_writeable("details", "accessed"):
-#             self.assertEqual(info.accessed, datetime(2016, 7, 5, tzinfo=pytz.UTC))
+#         old_info = self.fs.getinfo("new.txt", namespaces=["details"])
+#         if old_info.is_writeable("details", "accessed"):
+#             self.assertEqual(old_info.accessed, datetime(2016, 7, 5, tzinfo=pytz.UTC))
 #             now = time.time()
 #             self.fs.touch("new.txt")
 #             accessed = self.fs.getinfo("new.txt", namespaces=["details"]).raw[
