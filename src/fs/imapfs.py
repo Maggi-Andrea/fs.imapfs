@@ -507,7 +507,7 @@ class IMAPFS(FS):
                     flags = imap_details['flags']
                     if not isinstance(flags, list):
                         flags = [flags, ]
-                    flags = [f if isinstance(f, bytes) else f.encode('ansi') for f in flags]
+                    flags = [f if isinstance(f, bytes) else f.encode('ascii') for f in flags]
                     folder, file = split(_path)
                     self.imap.select_folder(imap_path(folder, self._delimiter))
                     self.imap.set_flags(imap_splitext(file)[0], flags)
