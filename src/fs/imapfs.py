@@ -492,6 +492,25 @@ class IMAPFS(FS):
             if file_name not in directory:
                 raise errors.ResourceNotFound(path)
             return directory[file_name]
+        
+    def setinfo(self, path, info):
+        # type: (Text, RawInfo) -> None
+        _path = self.validatepath(path)
+        if not self.exists(path):
+            raise errors.ResourceNotFound(path)
+        if not self.isfile(path):
+            raise errors.FileExpected(path)
+        with imap_errors(self, path):
+            if "imap" in info:
+                imap_details = info["imap"]
+                if "flags" in imap_details:
+                    flags = imap_details['flags']
+                    if not isinstance(flags, list):
+                        flags = [flags, ]
+                    flags = [f if isinstance(f, bytes) else f.encode('ansi') for f in flags]
+                    folder, file = split(_path)
+                    self.imap.select_folder(imap_path(folder, self._delimiter))
+                    self.imap.set_flags(imap_splitext(file)[0], flags)
 
     def getmeta(self, namespace="standard"):
         # type: (Text) -> Dict[Text, object]
@@ -677,12 +696,6 @@ class IMAPFS(FS):
             except IMAP4.error as e:
                 pass
             #TODO:
-
-    def setinfo(self, path, info):
-        # type: (Text, RawInfo) -> None
-        if not self.exists(path):
-            raise errors.ResourceNotFound(path)
-
 
     def close(self):
         if not self.isclosed():
