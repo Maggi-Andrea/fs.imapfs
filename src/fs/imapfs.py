@@ -360,13 +360,13 @@ class IMAPFS(FS):
                     "type": int(ResourceType.directory),
                 },
                 "imap": {
-                        'flags' : [flag.decode('ansi') for flag in flags]
+                        'flags' : [flag.decode('ascii') for flag in flags]
                     }
             }
         if folder_status:
             imap = raw_info['imap']
             for state in folder_status:
-                imap[state.decode('ansi').lower()] = folder_status[state]
+                imap[state.decode('ascii').lower()] = folder_status[state]
         return Info(raw_info)
     
     @staticmethod
@@ -385,7 +385,7 @@ class IMAPFS(FS):
                 raw_info['details']['size'] = file[b'RFC822.SIZE']
             if b'FLAGS' in file:
                 if 'imap' not in raw_info: raw_info['imap'] = {}
-                raw_info['imap']['flags'] = [flag.decode('ansi') for flag in file[b'FLAGS']]
+                raw_info['imap']['flags'] = [flag.decode('ascii') for flag in file[b'FLAGS']]
             if b'ENVELOPE' in file:
                 ev = file[b'ENVELOPE']
                 if ev.date:
@@ -407,7 +407,7 @@ class IMAPFS(FS):
             else:
                 for _, delimiter, _  in self.imap.list_folders():
                     if delimiter:
-                        self.__delimiter = delimiter.decode('ansi')
+                        self.__delimiter = delimiter.decode('ascii')
                         break
             if self.__delimiter is None:
                 self.__delimiter = ''
@@ -457,7 +457,7 @@ class IMAPFS(FS):
                 folder_root = None
                 folder_name = None
                 if delimiter:
-                    foldersplit = name.rsplit(delimiter.decode('ansi'), 1)
+                    foldersplit = name.rsplit(delimiter.decode('ascii'), 1)
                     if len(foldersplit) == 1:
                         folder_root, folder_name = '', foldersplit[0]
                     else:
@@ -466,7 +466,7 @@ class IMAPFS(FS):
                     pass
                 elif folder_root == imap_path(path, self._delimiter):
                     if delimiter:
-                        delimiter = delimiter.decode('ansi')
+                        delimiter = delimiter.decode('ascii')
                     else:
                         delimiter = ''
                     path_status = imap_join(self._delimiter, imap_path(path, self._delimiter), folder_name)

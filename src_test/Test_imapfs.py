@@ -845,7 +845,7 @@ class Test(unittest.TestCase):
                 f.write(b"no")
         self.assertTrue(f.closed)
  
-        with self.fs.open(self.TEST_PATH + "1.eml", "r", encoding='ansi') as f:
+        with self.fs.open(self.TEST_PATH + "1.eml", "r", encoding='ascii') as f:
             self.assertEqual(list(f), ['Hello\r\n', 'World\r\n', 'foo\r\n', 'bar\r\n', 'baz\r\n'])
             self.assertFalse(f.closed)
         self.assertTrue(f.closed)
