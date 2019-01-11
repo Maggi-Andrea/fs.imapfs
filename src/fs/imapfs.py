@@ -41,6 +41,7 @@ from .path import dirname
 from .path import basename
 from .path import normpath
 from .path import split
+from .path import join
 
 from imapclient.response_types import Envelope
 
@@ -106,46 +107,9 @@ def imap_errors(fs, path=None):
     except Exception as e:
         raise errors.FSError(str(type(e)))
 
-def imap_path(path, delimiter = '/'):
-    path = path.lstrip('/') if path.startswith('/') else path
-    path = path.rstrip('/') if path.endswith('/') else path
-    path = path.replace('/', delimiter)
-    return path
-
-def imap_splitext(file_name):
-    parts = file_name.split('.')
-    if len(parts) == 1:
-        return parts[0], ''
-    return '.'.join(parts[:-1]), parts[-1]
-
-def imap_join(delimiter, *paths):
-    # type: (*Text) -> Text
-    """Join any number of paths together.
-
-    Arguments:
-        *paths (str): Paths to join, given as positional arguments.
-
-    Returns:
-        str: The joined path.
-
-    Example:
-        >>> join('foo', 'bar', 'baz')
-        'foo/bar/baz'
-        >>> join('foo/bar', '../baz')
-        'foo/baz'
-        >>> join('foo/bar', '/baz')
-        '/baz'
-
-    """
-    relpaths = []  # type: List[Text]
-    for p in paths:
-        if p:
-            if p[0] == "/":
-                del relpaths[:]
-            relpaths.append(p)
-
-    path = delimiter.join(relpaths)
-    return path
+def filename_split(file_name):
+    parts = file_name.rsplit('.', 1)
+    return (parts[0], '') if len(parts) == 1 else (parts[0], parts[1])
 
 def _parse_imap_error(error):
     # type: (ftplib.Error) -> Tuple[Text, Text]
@@ -188,17 +152,16 @@ class IMAPFile(io.BytesIO):
         self.fs = imapfs
         self.path = path
         self.mode = Mode(mode)
-        self._lock = threading.Lock()
 
         if self.mode.reading:
-            with self.fs._manage_imap() as imap:
-                folder, file = split(self.path)
-                imap.select_folder(imap_path(folder, self.fs._delimiter))
-                file_name = imap_splitext(file)[0]
-                data = [f for f in imap.fetch(file_name, ['RFC822']).values()][0][b'RFC822']
-                super(IMAPFile, self).__init__(data)
+            folder, file_name = split(self.path)
+            file_id = filename_split(file_name)[0]
+            with imap_errors(self.fs, self.path):
+                self.fs.imap.select_folder(self.fs._imap_path(folder))
+                data = [f for f in self.fs.imap.fetch(file_id, ['RFC822']).values()][0][b'RFC822']
+                super().__init__(data)
         else:
-            super(IMAPFile, self).__init__()
+            super().__init__()
         
 
     def __repr__(self):
@@ -209,15 +172,13 @@ class IMAPFile(io.BytesIO):
     def close(self):
         # type: () -> None
         if not self.closed:
-            with self._lock:
-                if self.writable():
-                    folder, file = split(self.path)
-                    with self.fs._manage_imap() as imap:
-                        value = self.getvalue()
-                        if len(value) == 0:
-                            value = '\r\n'
-                        imap.append(imap_path(folder, self.fs._delimiter), value)
-                super(IMAPFile, self).close()
+            if self.writable():
+                value = self.getvalue()
+                if len(value) == 0:
+                    value = '\r\n'
+                with imap_errors(self.fs, self.path):
+                    self.fs.imap.append(self.fs._imap_path(dirname(self.path)), value)
+            super(IMAPFile, self).close()
 
     def readable(self):
         # type: () -> bool
@@ -312,12 +273,34 @@ class IMAPFS(FS):
             _imap = IMAPClient(self.host, self.port)
             _imap.login(self.user, self.passwd)
             self._welcome = _imap.welcome
+            if _imap.has_capability('NAMESPACE'):
+                personal_namespaces = _imap.namespace().personal
+                for personal_namespace in personal_namespaces:
+                    self.__ns_root = personal_namespace[0]
+                    self.__delimiter = personal_namespace[1]
+                    break
+            else:
+                for _, delimiter, _  in _imap.list_folders():
+                    if delimiter:
+                        self.__ns_root = ''
+                        self.__delimiter = delimiter.decode('ascii')
+                        break 
         return _imap
-
-    def _manage_imap(self):
-        # type: () -> ContextManager[FTP]
-        return self._get_imap()
     
+    @property
+    def _delimiter(self):
+        return self.__delimiter
+    
+    @property 
+    def _ns_root(self):
+        return self.__ns_root
+    
+    def _imap_path(self, fs_path):
+        fs_path = fs_path.lstrip('/') if fs_path.startswith('/') else fs_path
+        fs_path = fs_path.rstrip('/') if fs_path.endswith('/') else fs_path
+        fs_path = fs_path.replace('/', self._delimiter)
+        return fs_path   
+
     def _get_imap(self):
         # type: () -> IMAPClient
         if self._imap is not None:
@@ -347,11 +330,12 @@ class IMAPFS(FS):
     @property
     def imap(self):
         # type: () -> FTP
-        """~ftplib.FTP: the underlying FTP client.
+        """~imapclient.IMAPClient: the underlying IMAP client.
         """
         return self._get_imap()
 
-    def _dir_Info(self, name, flags=(), folder_status=None):
+    @staticmethod
+    def _dir_Info(name, flags=(), folder_status=None):
         raw_info = {
                 "basic": {
                     "name": name,
@@ -425,93 +409,56 @@ class IMAPFS(FS):
                 header_raw = {}
                 for key, item in header.items():
                     header_raw[key] = item
-                raw_info['imap']['header'] = header
+                raw_info['imap']['header'] = header_raw
                 
         return Info(raw_info)
     
-    @property
-    def _delimiter(self):
-        if self.__delimiter is None:
-            if self.imap.has_capability('NAMESPACE'):
-                personal_namespaces = self.imap.namespace().personal
-                for personal_namespace in personal_namespaces:
-                    self.__delimiter = personal_namespace[1]
-                    break
-            else:
-                for _, delimiter, _  in self.imap.list_folders():
-                    if delimiter:
-                        self.__delimiter = delimiter.decode('ascii')
-                        break
-            if self.__delimiter is None:
-                self.__delimiter = ''
-        return self.__delimiter
-    
-    @property 
-    def _ns_root(self):
-        if self.__ns_root is None:
-            if self.imap.has_capability('NAMESPACE'):
-                personal_namespaces = self.imap.namespace().personal
-                for personal_namespace in personal_namespaces:
-                    self.__ns_root = personal_namespace[0]
-                    if self.__ns_root is not None:
-                        break
-            if self.__ns_root is None:
-                self.__ns_root = ''
-        return self.__ns_root     
-    
-    def _read_dir(self, path, namespaces=None):
+    def _read_dir(self, fs_path, namespaces=None):
         namespaces = namespaces or ()
-        def _get_folder_list(path):
-            folder_list = imap.list_folders(imap_path(path, self._delimiter))
+        
+        def _get_folder_list(folder_path):
+            folder_list = imap.list_folders(self._imap_path(folder_path))
             if len(folder_list) == 1:
-                flags, delimiter, name = folder_list[0]
+                flags, delimiter, _ = folder_list[0]
                 if delimiter is None and b'\\Noinferiors' in flags:
                     folder_list = imap.list_folders('')
             return folder_list
+        
         _list = []
-        with imap_errors(self, path):
+        with imap_errors(self, fs_path):
             imap = self.imap
             _selected = None
             try:
-                if imap_path(path, self._delimiter) != '':
-                    _selected = imap.select_folder(imap_path(path, self._delimiter))
-            except IMAP4.error as error:
-                message, _code = _parse_imap_error(error)
-                raise errors.ResourceNotFound(path)
-                if message == 'select failed: invalid mailbox namespace':
-                    pass
-                if message == 'select failed: folder does not exist':
-                    raise errors.ResourceNotFound(path)
+                if fs_path != '/':
+                    _selected = imap.select_folder(self._imap_path(fs_path))
+            except IMAP4.error:
+                raise errors.ResourceNotFound(fs_path)
             if _selected and _selected[b'EXISTS']:
                 for file_name, file in imap.fetch(imap.search(), ['FLAGS', 'ENVELOPE', 'RFC822.SIZE', 'RFC822.HEADER']).items():
                     _list.append(IMAPFS._file_Info(str(file_name), file))
             
-            for flags, delimiter, name  in _get_folder_list(path):
-                folder_root = None
-                folder_name = None
-                if delimiter:
-                    foldersplit = name.rsplit(delimiter.decode('ascii'), 1)
-                    if len(foldersplit) == 1:
-                        folder_root, folder_name = '', foldersplit[0]
-                    else:
-                        folder_root, folder_name = foldersplit[0], foldersplit[1]
+            for flags, delimiter, name  in _get_folder_list(fs_path):
                 if b'\\Noinferiors' in flags:
                     pass
-                elif folder_root == imap_path(path, self._delimiter):
+                else:
+                    delimiter = delimiter.decode('ascii') if delimiter else None
+                    parent_folder = None
+                    sub_folder = None
                     if delimiter:
-                        delimiter = delimiter.decode('ascii')
-                    else:
-                        delimiter = ''
-                    path_status = imap_join(self._delimiter, imap_path(path, self._delimiter), folder_name)
-                    folder_status = imap.folder_status(path_status)
-                    _list.append(self._dir_Info(folder_name, flags, folder_status))
+                        foldersplit = name.rsplit(delimiter, 1)
+                        if len(foldersplit) == 1:
+                            parent_folder, sub_folder = '', foldersplit[0]
+                        else:
+                            parent_folder, sub_folder = foldersplit[0], foldersplit[1]
+                    if parent_folder == self._imap_path(fs_path):
+                        folder_status = imap.folder_status(self._imap_path(join(fs_path, sub_folder)))
+                        _list.append(self._dir_Info(sub_folder, flags, folder_status))
         return OrderedDict({info.name: info for info in _list})
-
 
     def getinfo(self, path, namespaces=None):
         # type: (Text, Optional[Container[Text]]) -> Info
-        _path = self.validatepath(path)
-        if _path == "/":
+        _fs_path = self.validatepath(path)
+        if _fs_path == "/":
             return Info(
                 {
                     "basic": {"name": "", "is_dir": True},
@@ -520,7 +467,7 @@ class IMAPFS(FS):
             )
 
         with imap_errors(self, path=path):
-            dir_name, file_name = split(_path)
+            dir_name, file_name = split(_fs_path)
             directory = self._read_dir(dir_name, namespaces)
             if file_name not in directory:
                 raise errors.ResourceNotFound(path)
@@ -528,7 +475,7 @@ class IMAPFS(FS):
         
     def setinfo(self, path, info):
         # type: (Text, RawInfo) -> None
-        _path = self.validatepath(path)
+        _fs_path = self.validatepath(path)
         if not self.exists(path):
             raise errors.ResourceNotFound(path)
         if not self.isfile(path):
@@ -541,9 +488,9 @@ class IMAPFS(FS):
                     if not isinstance(flags, list):
                         flags = [flags, ]
                     flags = [f if isinstance(f, bytes) else f.encode('ascii') for f in flags]
-                    folder, file = split(_path)
-                    self.imap.select_folder(imap_path(folder, self._delimiter))
-                    self.imap.set_flags(imap_splitext(file)[0], flags)
+                    folder, file_name = split(_fs_path)
+                    self.imap.select_folder(self._imap_path(folder))
+                    self.imap.set_flags(filename_split(file_name)[0], flags)
 
     def getmeta(self, namespace="standard"):
         # type: (Text) -> Dict[Text, object]
@@ -614,10 +561,10 @@ class IMAPFS(FS):
         recreate=False,  # type: bool
     ):
         # type: (...) -> SubFS[_F]
-        _path = self.validatepath(path)
+        _fs_path = self.validatepath(path)
 
         with imap_errors(self, path=path):
-            if _path == "/":
+            if _fs_path == "/":
                 if recreate:
                     return self.opendir(path)
                 else:
@@ -625,8 +572,7 @@ class IMAPFS(FS):
             if self.exists(path) and not  recreate:
                 raise errors.DirectoryExists(path)
             if not (recreate and self.isdir(path)):
-                target = imap_path(path, self._delimiter)
-                folders = target.split(self._delimiter)
+                folders = _fs_path.split('/')
                 check_folder = ''
                 for n, folder in enumerate(folders):
                     if n == 0:
@@ -636,7 +582,7 @@ class IMAPFS(FS):
                     if n < len(folders) - 1 and not self.exists(check_folder):
                         raise errors.ResourceNotFound(path)
                 try:
-                    self.imap.create_folder(target)
+                    self.imap.create_folder(self._imap_path(_fs_path))
                 except IMAP4.error as error:
                     _, code = _parse_imap_error(error)
                     if code == '6':
@@ -649,6 +595,7 @@ class IMAPFS(FS):
         _mode = Mode(mode)
         _mode.validate_bin()
         _path = self.validatepath(path)
+        _folder, _file_name = split(_path)
         with imap_errors(self, path):
             try:
                 info = self.getinfo(_path)
@@ -662,7 +609,7 @@ class IMAPFS(FS):
                     raise errors.FileExpected(path)
                 if info.is_file and _mode.writing:
                     raise errors.FileExists(path)
-            if imap_splitext(split(_path)[1])[1] != 'eml':
+            if filename_split(_file_name)[1] != 'eml':
                 raise errors.PathError(path = path, msg="path '{path}' is invalid becouse file must have '.eml' extention")
             imap_file = IMAPFile(self, _path, mode)
         return imap_file  # type: ignore
@@ -686,49 +633,41 @@ class IMAPFS(FS):
                     else:
                         raise errors.DestinationExists(dst_path)
             _src_folder, _src_file = split(_src_path)
-            self.imap.select_folder(imap_path(_src_folder, self._delimiter))
-             
+            self.imap.select_folder(self._imap_path(_src_folder))
             _dst_folder, _dst_file = split(_dst_path)
             try:
-                self.imap.copy(imap_splitext(_src_file)[0], imap_path(_dst_folder, self._delimiter))
-            except IMAP4.error as error:
+                self.imap.copy(filename_split(_src_file)[0], self._imap_path(_dst_folder))
+            except IMAP4.error:
                 raise errors.ResourceNotFound(dst_path)
-                message, code = _parse_imap_error(error)
-                print(message, code)
-                if message == 'copy failed: [TRYCREATE] mailbox name does not exist or is not selectable':
-                    if code == '0':
-                        raise errors.ResourceNotFound(dst_path)
-                
 
     def remove(self, path):
         # type: (Text) -> None
-        _path = self.validatepath(path)
+        _fs_path = self.validatepath(path)
         with imap_errors(self, path):
             if self.isdir(path):
                 raise errors.FileExpected(path=path)
             if not self.exists(path):
                 raise errors.ResourceNotFound(path=path)
-            dir_name, file_name = split(_path)
-            self.imap.select_folder(imap_path(dir_name, self._delimiter))
-            result = self.imap.delete_messages(imap_splitext(file_name)[0])
+            folder, file_name = split(_fs_path)
+            self.imap.select_folder(self._imap_path(folder))
+            result = self.imap.delete_messages(filename_split(file_name)[0])
             for file_id in result.keys():
                 self.imap.expunge(file_id)
 
     def removedir(self, path):
         # type: (Text) -> None
-        _path = self.validatepath(path)
-        if _path == "/":
+        _fs_path = self.validatepath(path)
+        if _fs_path == "/":
             raise errors.RemoveRootError()
-        with imap_errors(self, _path):
+        with imap_errors(self, path):
             if self.isfile(path):
                 raise errors.DirectoryExpected(path=path)
             if not self.isempty(path):
                 raise errors.DirectoryNotEmpty(path=path)
             try:
-                self.imap.delete_folder(imap_path(_path, self._delimiter))
-            except IMAP4.error as e:
+                self.imap.delete_folder(self._imap_path(_fs_path))
+            except IMAP4.error:
                 pass
-            #TODO:
 
     def close(self):
         if not self.isclosed():

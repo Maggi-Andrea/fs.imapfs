@@ -363,7 +363,7 @@ class Test(unittest.TestCase):
         self.fs.appendbytes(self.TEST_PATH + "1.eml", b"bar\r\n")
         self.assert_bytes(self.TEST_PATH + "1.eml", b"bar\r\n")
         
-        #IMPA file do not allow append
+        #IMAP file do not allow append
         with self.assertRaises(errors.FileExists):
             self.fs.appendbytes(self.TEST_PATH + "1.eml", b"baz\r\n")
         self.assert_bytes(self.TEST_PATH + "1.eml", b"bar\r\n")
@@ -373,7 +373,7 @@ class Test(unittest.TestCase):
             self.fs.appendtext(self.TEST_PATH + "1.eml", b"bar\r\n")
         self.fs.appendtext(self.TEST_PATH + "1.eml", "bar\r\n")
         self.assert_text(self.TEST_PATH + "1.eml", "bar\r\n")
-        #IMPA file do not allow append
+        #IMAP file do not allow append
         with self.assertRaises(errors.FileExists):
             self.fs.appendtext(self.TEST_PATH + "1.eml", "baz\r\n")
         self.assert_text(self.TEST_PATH + "1.eml", "bar\r\n")
