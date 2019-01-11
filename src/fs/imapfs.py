@@ -16,6 +16,7 @@ import itertools
 import socket
 import threading
 import typing
+import email
 from collections import OrderedDict
 from contextlib import contextmanager
 
@@ -370,6 +371,14 @@ class IMAPFS(FS):
         return Info(raw_info)
     
     @staticmethod
+    def _tuple_address(address):
+        name = address.name.decode('ascii') if address.name else None
+        mailbox = address.mailbox.decode('ascii') if address.mailbox else None
+        host = address.host.decode('ascii') if address.host else None
+        route = address.route.decode('ascii') if address.route else None
+        return tuple([name, mailbox, host, route])
+    
+    @staticmethod
     def _file_Info(name, file=None):
         raw_info = {
                 "basic": {
@@ -380,12 +389,13 @@ class IMAPFS(FS):
                     "type": int(ResourceType.file),
                 }
         }
+        encoding = 'ascii'
         if file:
             if b'RFC822.SIZE' in file:
                 raw_info['details']['size'] = file[b'RFC822.SIZE']
             if b'FLAGS' in file:
                 if 'imap' not in raw_info: raw_info['imap'] = {}
-                raw_info['imap']['flags'] = [flag.decode('ascii') for flag in file[b'FLAGS']]
+                raw_info['imap']['flags'] = [flag.decode(encoding) for flag in file[b'FLAGS']]
             if b'ENVELOPE' in file:
                 ev = file[b'ENVELOPE']
                 if ev.date:
@@ -394,6 +404,29 @@ class IMAPFS(FS):
                     raw_info['details']['created'] = ev.date.timestamp()
                 if 'imap' not in raw_info: raw_info['imap'] = {}
                 raw_info['imap']['envelope'] = ev
+                raw_info['imap']['subject'] = ev.subject.decode(encoding) if ev.subject else None
+                if ev.from_:
+                    raw_info['imap']['from'] = [IMAPFS._tuple_address(address) for address in ev.from_]
+                if ev.sender:
+                    raw_info['imap']['sender'] = [IMAPFS._tuple_address(address) for address in ev.sender]
+                if ev.reply_to:
+                    raw_info['imap']['reply_to'] = [IMAPFS._tuple_address(address) for address in ev.reply_to]
+                if ev.to:
+                    raw_info['imap']['reply_to'] = [IMAPFS._tuple_address(address) for address in ev.to]
+                if ev.cc:
+                    raw_info['imap']['cc'] = [IMAPFS._tuple_address(address) for address in ev.cc]
+                if ev.bcc:
+                    raw_info['imap']['bcc'] = [IMAPFS._tuple_address(address) for address in ev.bcc]
+                if ev.in_reply_to:
+                    raw_info['imap']['in_reply_to'] = [IMAPFS._tuple_address(address) for address in ev.in_reply_to]
+            if b'RFC822.HEADER' in file:
+                header = email.message_from_bytes(file[b'RFC822.HEADER'])
+                if 'imap' not in raw_info: raw_info['imap'] = {}
+                header_raw = {}
+                for key, item in header.items():
+                    header_raw[key] = item
+                raw_info['imap']['header'] = header
+                
         return Info(raw_info)
     
     @property
@@ -450,7 +483,7 @@ class IMAPFS(FS):
                 if message == 'select failed: folder does not exist':
                     raise errors.ResourceNotFound(path)
             if _selected and _selected[b'EXISTS']:
-                for file_name, file in imap.fetch(imap.search(), ['FLAGS', 'ENVELOPE', 'RFC822.SIZE']).items():
+                for file_name, file in imap.fetch(imap.search(), ['FLAGS', 'ENVELOPE', 'RFC822.SIZE', 'RFC822.HEADER']).items():
                     _list.append(IMAPFS._file_Info(str(file_name), file))
             
             for flags, delimiter, name  in _get_folder_list(path):
