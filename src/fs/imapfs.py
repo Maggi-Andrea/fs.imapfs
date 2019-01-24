@@ -51,7 +51,7 @@ _F = typing.TypeVar("_F", bound="IMAPFS")
 
 __all__ = ["IMAPFS"]
 
-RE_APPEND = re.compile(r'\[(?P<list>(.*?))\]')
+RE_APPEND_INFO = re.compile(r'(?<=\[)(?P<list>.*)(?=\])')
 
 class Info(BaseInfo):
     
@@ -176,8 +176,7 @@ class IMAPFile(io.BytesIO):
                 value = self.getvalue()
                 if len(value) == 0:
                     value = '\r\n'
-                with imap_errors(self.fs, self.path):
-                    self.fs.imap.append(self.fs._imap_path(dirname(self.path)), value)
+                self.fs.save_message(dirname(self.path), value)
             super(IMAPFile, self).close()
 
     def readable(self):
@@ -589,6 +588,14 @@ class IMAPFS(FS):
                         raise errors.DirectoryExists(path)
                     raise errors.ResourceNotFound(path)
         return self.opendir(path)
+    
+    def save_message(self, path, msg):
+        _path = self.validatepath(path)
+        with imap_errors(self, path):
+            result = self.imap.append(self._imap_path(path), msg)
+            append_info = RE_APPEND_INFO.search(result.decode('ascii')).group('list').split(' ')
+            return append_info[1], append_info[2]
+            return self.getinfo('/'.join([path, "%s.eml" % append_info[2]]))
 
     def openbin(self, path, mode="r", buffering=-1, **options):
         # type: (Text, Text, int, **Any) -> BinaryIO
