@@ -1,6 +1,13 @@
 # fs.imapfs
 Pyfilesystem2 implementation for Imap
 
+Installation
+------------
+
+Install directly from PyPI, using `pip <https://pip.pypa.io/>`_ ::
+
+    pip install fs.imapfs
+
 Intro
 =====
 
