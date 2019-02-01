@@ -1,4 +1,4 @@
-# imapfs
+# fs.imapfs
 Pyfilesystem2 implementation for Imap
 
 Intro
