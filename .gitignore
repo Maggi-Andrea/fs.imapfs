@@ -1,3 +1,8 @@
 **/__pycache__/*.*
 /.project
 /.pydevproject
+/.settings/
+
+
+#Test imapfs with your imap server
+tests/Test_my_imapfs.py

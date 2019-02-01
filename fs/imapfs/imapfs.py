@@ -28,20 +28,20 @@ from imaplib import IMAP4
 from six import PY2
 from six import text_type
 
-from . import errors
-from .base import FS
-from .constants import DEFAULT_CHUNK_SIZE
-from .enums import ResourceType
-from .enums import Seek
-from .info import Info as BaseInfo
-from .iotools import line_iterator
-from .mode import Mode
-from .path import abspath
-from .path import dirname
-from .path import basename
-from .path import normpath
-from .path import split
-from .path import join
+from .. import errors
+from ..base import FS
+from ..constants import DEFAULT_CHUNK_SIZE
+from ..enums import ResourceType
+from ..enums import Seek
+from ..info import Info as BaseInfo
+from ..iotools import line_iterator
+from ..mode import Mode
+from ..path import abspath
+from ..path import dirname
+from ..path import basename
+from ..path import normpath
+from ..path import split
+from ..path import join
 
 from imapclient.response_types import Envelope
 
