@@ -24,3 +24,4 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+/INFO_DEPLOY.txt
