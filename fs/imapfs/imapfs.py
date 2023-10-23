@@ -3,7 +3,7 @@ Created on 06 dic 2018
 
 @author: Andrea
 '''
-from symbol import except_clause
+# from symbol import except_clause
 """Manage filesystems on remote IMAP servers.
 """
 # from __future__ import print_function
