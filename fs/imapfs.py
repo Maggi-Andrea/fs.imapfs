@@ -581,11 +581,14 @@ class IMAPFS(FS):
                 raise errors.ResourceNotFound(fs_dir_path)
             else:
                 if selected and selected[b"EXISTS"]:
-                    for file_name, file in self.imap.fetch(
-                        self.imap.search(),
-                        ["FLAGS", "ENVELOPE", "RFC822.SIZE", "RFC822.HEADER"],
-                    ).items():
-                        yield _file_info(str(file_name), file)
+                    page_size = 10
+                    all_files = self.imap.search()
+                    for file_group in [all_files[i:i+page_size] for i in range(0, len(all_files), page_size)]:
+                        for file_name, file in self.imap.fetch(
+                            file_group,
+                            ["FLAGS", "ENVELOPE", "RFC822.SIZE", "RFC822.HEADER"],
+                        ).items():
+                            yield _file_info(str(file_name), file)
 
             for flags, delimiter, name in self._get_folder_list(fs_dir_path):
                 if b"\\Noinferiors" in flags:
